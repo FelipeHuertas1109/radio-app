@@ -1,0 +1,14 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Fondo azul -->
+  <rect width="1024" height="1024" fill="#1E3A8A" rx="200"/>
+  
+  <!-- Círculo de ondas de radio -->
+  <circle cx="512" cy="400" r="120" fill="none" stroke="#FFFFFF" stroke-width="20" opacity="0.8"/>
+  <circle cx="512" cy="400" r="80" fill="none" stroke="#FFFFFF" stroke-width="15" opacity="0.9"/>
+  <circle cx="512" cy="400" r="40" fill="#FFFFFF"/>
+  
+  <!-- Texto HQS Radio -->
+  <text x="512" y="600" font-family="Arial, sans-serif" font-size="120" font-weight="bold" fill="#FFFFFF" text-anchor="middle">HQS</text>
+  <text x="512" y="720" font-family="Arial, sans-serif" font-size="80" fill="#FFFFFF" text-anchor="middle">RADIO</text>
+</svg>
+
