@@ -1,21 +1,38 @@
-/**
- * Configuración centralizada de la aplicación HQS Radio
- */
-
 export const APP_CONFIG = {
   name: 'HQS Radio',
+  subtitle: 'La Voz del Llano',
   version: '1.0.0',
   defaultStreamUrl: 'https://radio.hqs.com.co:9004/stream',
   colors: {
-    primary: '#1E3A8A',
-    primaryLight: '#3B82F6',
-    primaryLighter: '#60A5FA',
-    success: '#10B981',
-    error: '#EF4444',
-    warning: '#F59E0B',
-    white: '#FFFFFF',
-    gray: '#9CA3AF',
-    grayLight: '#E5E7EB',
+    // Sunset / Llano palette
+    bgDark: '#1A0F0A',
+    bgMid: '#2D1810',
+    bgWarm: '#4A2512',
+    sunset1: '#1A0F0A',
+    sunset2: '#3D1A0B',
+    sunset3: '#7A3B1E',
+    sunset4: '#C2622D',
+    sunset5: '#E8943A',
+    gold: '#DAA520',
+    goldLight: '#F0C75E',
+    goldSoft: '#FFE4A0',
+    amber: '#D4870E',
+    amberGlow: '#F5A623',
+    terra: '#8B5E3C',
+    terraDark: '#5C3A1E',
+    warmGreen: '#4A7C3F',
+    warmGreenDark: '#2D5016',
+    cream: '#FFF8E7',
+    creamSoft: '#F5E6CC',
+    warmWhite: '#FAEBD7',
+    warmGray: '#B8A08A',
+    warmGrayDark: '#7A6655',
+    error: '#D94F4F',
+    errorSoft: '#F5B7B7',
+    cardBg: 'rgba(42, 25, 15, 0.7)',
+    cardBorder: 'rgba(218, 165, 32, 0.25)',
+    overlayDark: 'rgba(26, 15, 10, 0.6)',
+    overlayLight: 'rgba(218, 165, 32, 0.1)',
   },
   storage: {
     key: '@hqs_radio_settings',
@@ -30,9 +47,8 @@ export const APP_CONFIG = {
   },
   ui: {
     splashScreenDelay: 2000,
-    blurIntensity: 20,
+    blurIntensity: 40,
   },
 };
 
 export default APP_CONFIG;
-

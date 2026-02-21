@@ -19,7 +19,6 @@ const essentialFiles = [
   'metro.config.js',
   'eas.json',
   'components/RadioPlayer.js',
-  'components/AdminPanel.js',
 ];
 
 essentialFiles.forEach(file => {

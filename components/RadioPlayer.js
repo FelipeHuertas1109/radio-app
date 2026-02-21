@@ -4,22 +4,94 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Slider,
   ActivityIndicator,
   Alert,
   Dimensions,
+  Animated,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { APP_CONFIG } from '../constants/Config';
 
 const { width } = Dimensions.get('window');
+const C = APP_CONFIG.colors;
 
-const STREAM_URL = 'https://radio.hqs.com.co:9004/stream';
-const STORAGE_KEY = '@hqs_radio_settings';
+const STREAM_URL = APP_CONFIG.defaultStreamUrl;
+const STORAGE_KEY = APP_CONFIG.storage.key;
 
-const RadioPlayer = React.forwardRef(({ onShowAdmin }, ref) => {
+function EqualizerBars({ isActive }) {
+  const bars = useRef(
+    Array.from({ length: 5 }, () => new Animated.Value(0.3))
+  ).current;
+
+  useEffect(() => {
+    if (isActive) {
+      bars.forEach((bar, i) => {
+        const animate = () => {
+          Animated.sequence([
+            Animated.timing(bar, {
+              toValue: 0.5 + Math.random() * 0.5,
+              duration: 300 + Math.random() * 400,
+              useNativeDriver: true,
+            }),
+            Animated.timing(bar, {
+              toValue: 0.2 + Math.random() * 0.3,
+              duration: 300 + Math.random() * 400,
+              useNativeDriver: true,
+            }),
+          ]).start(() => {
+            if (isActive) animate();
+          });
+        };
+        setTimeout(() => animate(), i * 120);
+      });
+    } else {
+      bars.forEach(bar => {
+        Animated.timing(bar, {
+          toValue: 0.15,
+          duration: 600,
+          useNativeDriver: true,
+        }).start();
+      });
+    }
+  }, [isActive]);
+
+  return (
+    <View style={eqStyles.container}>
+      {bars.map((bar, i) => (
+        <Animated.View
+          key={i}
+          style={[
+            eqStyles.bar,
+            {
+              transform: [{ scaleY: bar }],
+              backgroundColor: i % 2 === 0 ? C.gold : C.amberGlow,
+            },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+const eqStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 32,
+    gap: 4,
+  },
+  bar: {
+    width: 4,
+    height: 32,
+    borderRadius: 2,
+  },
+});
+
+const RadioPlayer = React.forwardRef((_, ref) => {
   const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -29,18 +101,15 @@ const RadioPlayer = React.forwardRef(({ onShowAdmin }, ref) => {
   const [buffering, setBuffering] = useState(false);
   const [currentStreamUrl, setCurrentStreamUrl] = useState(STREAM_URL);
   const reconnectTimeoutRef = useRef(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadSettings();
     configureAudioMode();
-
     return () => {
-      if (sound) {
-        sound.unloadAsync();
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
+      if (sound) sound.unloadAsync();
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
     };
   }, []);
 
@@ -50,17 +119,28 @@ const RadioPlayer = React.forwardRef(({ onShowAdmin }, ref) => {
     }
   }, [sound]);
 
+  useEffect(() => {
+    if (isPlaying) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.15, duration: 1200, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
+        ])
+      ).start();
+      Animated.timing(glowAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+    } else {
+      pulseAnim.stopAnimation();
+      Animated.timing(pulseAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+      Animated.timing(glowAnim, { toValue: 0, duration: 400, useNativeDriver: true }).start();
+    }
+  }, [isPlaying]);
+
   const loadSettings = async () => {
     try {
       const savedVolume = await AsyncStorage.getItem(`${STORAGE_KEY}_volume`);
       const savedUrl = await AsyncStorage.getItem(`${STORAGE_KEY}_url`);
-      
-      if (savedVolume !== null) {
-        setVolume(parseFloat(savedVolume));
-      }
-      if (savedUrl !== null) {
-        setCurrentStreamUrl(savedUrl);
-      }
+      if (savedVolume !== null) setVolume(parseFloat(savedVolume));
+      if (savedUrl !== null) setCurrentStreamUrl(savedUrl);
     } catch (e) {
       console.error('Error loading settings:', e);
     }
@@ -88,32 +168,23 @@ const RadioPlayer = React.forwardRef(({ onShowAdmin }, ref) => {
 
   const onPlaybackStatusUpdate = (status) => {
     setPlaybackStatus(status);
-    
     if (status.isLoaded) {
       setIsPlaying(status.isPlaying);
       setBuffering(status.isBuffering);
-      
-      if (status.didJustFinish) {
-        handleReconnect();
-      }
+      if (status.didJustFinish) handleReconnect();
     } else if (status.error) {
-      setError(`Error de reproducción: ${status.error}`);
+      setError(`Error: ${status.error}`);
       setIsPlaying(false);
       handleReconnect();
     }
   };
 
   const handleReconnect = () => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-    }
-    
+    if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
     reconnectTimeoutRef.current = setTimeout(() => {
       if (isPlaying) {
         stopPlayback();
-        setTimeout(() => {
-          startPlayback();
-        }, 1000);
+        setTimeout(() => startPlayback(), 1000);
       }
     }, 3000);
   };
@@ -122,24 +193,12 @@ const RadioPlayer = React.forwardRef(({ onShowAdmin }, ref) => {
     try {
       setIsLoading(true);
       setError(null);
-
-      // Detener reproducción anterior si existe
-      if (sound) {
-        await sound.unloadAsync();
-      }
-
-      // Crear nueva instancia de audio
+      if (sound) await sound.unloadAsync();
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: currentStreamUrl },
-        {
-          shouldPlay: true,
-          volume: volume,
-          isLooping: false,
-          isMuted: false,
-        },
+        { shouldPlay: true, volume, isLooping: false, isMuted: false },
         onPlaybackStatusUpdate
       );
-
       setSound(newSound);
       setIsPlaying(true);
       setIsLoading(false);
@@ -148,41 +207,32 @@ const RadioPlayer = React.forwardRef(({ onShowAdmin }, ref) => {
       setError(`Error al conectar: ${e.message}`);
       setIsLoading(false);
       setIsPlaying(false);
-      
       Alert.alert(
-        'Error de Conexión',
-        'No se pudo conectar a la transmisión. Verifica tu conexión a internet.',
+        'Error de Conexion',
+        'No se pudo conectar a la transmision. Verifica tu conexion a internet.',
         [{ text: 'Reintentar', onPress: startPlayback }, { text: 'OK' }]
       );
     }
   };
 
   const stopPlayback = async () => {
-    try {
-      if (sound) {
-        await sound.stopAsync();
-        await sound.unloadAsync();
-        setSound(null);
-      }
-      setIsPlaying(false);
-      setBuffering(false);
-    } catch (e) {
-      console.error('Error stopping playback:', e);
+    if (sound) {
+      try { await sound.stopAsync(); } catch (_) {}
+      try { await sound.unloadAsync(); } catch (_) {}
+      setSound(null);
     }
+    setIsPlaying(false);
+    setBuffering(false);
   };
 
   const togglePlayback = async () => {
-    if (isPlaying) {
-      await stopPlayback();
-    } else {
-      await startPlayback();
-    }
+    if (isPlaying) await stopPlayback();
+    else await startPlayback();
   };
 
   const handleVolumeChange = async (newVolume) => {
     setVolume(newVolume);
     saveSettings('volume', newVolume);
-    
     if (sound) {
       try {
         await sound.setVolumeAsync(newVolume);
@@ -194,178 +244,216 @@ const RadioPlayer = React.forwardRef(({ onShowAdmin }, ref) => {
 
   const updateStreamUrl = async (newUrl) => {
     const wasPlaying = isPlaying;
-    if (wasPlaying) {
-      await stopPlayback();
-    }
+    if (wasPlaying) await stopPlayback();
     setCurrentStreamUrl(newUrl);
     saveSettings('url', newUrl);
-    
-    if (wasPlaying) {
-      setTimeout(() => {
-        startPlayback();
-      }, 500);
-    }
+    if (wasPlaying) setTimeout(() => startPlayback(), 500);
   };
 
-  // Exponer función para AdminPanel
-  React.useImperativeHandle(ref, () => ({
-    updateStreamUrl,
-  }));
+  React.useImperativeHandle(ref, () => ({ updateStreamUrl }));
 
   return (
     <View style={styles.container}>
-      <BlurView intensity={20} style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>HQS Radio</Text>
-          <TouchableOpacity
-            style={styles.adminButton}
-            onPress={onShowAdmin}
-          >
-            <Text style={styles.adminButtonText}>⚙️</Text>
-          </TouchableOpacity>
-        </View>
+      <LinearGradient
+        colors={['rgba(42, 25, 15, 0.0)', 'rgba(30, 18, 10, 0.6)', 'rgba(26, 15, 10, 0.85)']}
+        locations={[0, 0.3, 1]}
+        style={styles.fullGradient}
+      >
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.title}>La Voz del Llano</Text>
+          </View>
 
-        {/* Status */}
-        <View style={styles.statusContainer}>
-          {isLoading ? (
-            <ActivityIndicator size="large" color="#3B82F6" />
-          ) : error ? (
-            <Text style={styles.errorText}>{error}</Text>
-          ) : buffering ? (
-            <View style={styles.bufferingContainer}>
-              <ActivityIndicator size="small" color="#3B82F6" />
-              <Text style={styles.statusText}>Cargando...</Text>
+          {/* Decorative divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerIcon}>♪</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Status */}
+          <View style={styles.statusContainer}>
+            {isLoading ? (
+              <>
+                <ActivityIndicator size="large" color={C.gold} />
+                <Text style={styles.statusText}>Conectando...</Text>
+              </>
+            ) : error ? (
+              <Text style={styles.errorText}>{error}</Text>
+            ) : buffering ? (
+              <>
+                <ActivityIndicator size="small" color={C.amberGlow} />
+                <Text style={styles.statusText}>Cargando...</Text>
+              </>
+            ) : isPlaying ? (
+              <>
+                <EqualizerBars isActive={true} />
+                <View style={styles.liveContainer}>
+                  <View style={styles.liveDot} />
+                  <Text style={styles.liveText}>EN VIVO</Text>
+                </View>
+              </>
+            ) : (
+              <Text style={styles.statusTextIdle}>Presiona play para escuchar</Text>
+            )}
+          </View>
+
+          {/* Play Button */}
+          <View style={styles.playSection}>
+            <Animated.View style={[styles.playGlowRing, {
+              transform: [{ scale: pulseAnim }],
+              opacity: glowAnim,
+            }]} />
+            <TouchableOpacity
+              style={styles.playButton}
+              onPress={togglePlayback}
+              disabled={isLoading}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={isPlaying ? [C.sunset4, C.sunset3] : [C.gold, C.amber]}
+                style={styles.playButtonGradient}
+              >
+                <Text style={styles.playButtonText}>
+                  {isPlaying ? '■' : '▶'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+
+          {/* Volume */}
+          <View style={styles.volumeContainer}>
+            <View style={styles.volumeHeader}>
+              <Text style={styles.volumeLabel}>Volumen</Text>
+              <Text style={styles.volumeValue}>{Math.round(volume * 100)}%</Text>
             </View>
-          ) : isPlaying ? (
-            <View style={styles.playingContainer}>
-              <View style={styles.pulseCircle} />
-              <Text style={styles.statusText}>En Vivo</Text>
-            </View>
-          ) : (
-            <Text style={styles.statusText}>Detenido</Text>
-          )}
-        </View>
-
-        {/* Main Play Button */}
-        <TouchableOpacity
-          style={styles.playButton}
-          onPress={togglePlayback}
-          disabled={isLoading}
-        >
-          <LinearGradient
-            colors={isPlaying ? ['#EF4444', '#DC2626'] : ['#10B981', '#059669']}
-            style={styles.playButtonGradient}
-          >
-            <Text style={styles.playButtonText}>
-              {isPlaying ? '⏸' : '▶'}
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
-
-        {/* Volume Control */}
-        <View style={styles.volumeContainer}>
-          <Text style={styles.volumeLabel}>Volumen</Text>
-          <View style={styles.volumeControls}>
-            <Text style={styles.volumeIcon}>🔇</Text>
             <Slider
               style={styles.volumeSlider}
               minimumValue={0}
               maximumValue={1}
               value={volume}
               onValueChange={handleVolumeChange}
-              minimumTrackTintColor="#3B82F6"
-              maximumTrackTintColor="#E5E7EB"
-              thumbTintColor="#3B82F6"
+              minimumTrackTintColor={C.gold}
+              maximumTrackTintColor={C.terraDark}
+              thumbTintColor={C.goldLight}
             />
-            <Text style={styles.volumeIcon}>🔊</Text>
           </View>
-          <Text style={styles.volumeValue}>{Math.round(volume * 100)}%</Text>
-        </View>
 
-        {/* Stream Info */}
-        <View style={styles.infoContainer}>
-          <Text style={styles.infoLabel}>Stream URL:</Text>
-          <Text style={styles.infoValue} numberOfLines={1}>
-            {currentStreamUrl}
-          </Text>
-        </View>
-      </BlurView>
+
+          {/* Instruments deco */}
+          <View style={styles.decoRow}>
+            <Text style={styles.decoText}>♪  Arpa, Cuatro y Maracas  ♪</Text>
+          </View>
+      </LinearGradient>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
   },
-  content: {
-    width: width - 40,
-    borderRadius: 20,
-    padding: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  fullGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    paddingBottom: 40,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 4,
   },
   title: {
     fontSize: 32,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    fontWeight: '800',
+    color: C.gold,
+    letterSpacing: 1.5,
+    textAlign: 'center',
+    textShadowColor: 'rgba(218, 165, 32, 0.35)',
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    textShadowRadius: 10,
   },
-  adminButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
+  divider: {
+    flexDirection: 'row',
     alignItems: 'center',
+    marginVertical: 20,
   },
-  adminButtonText: {
-    fontSize: 20,
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(218, 165, 32, 0.2)',
+  },
+  dividerIcon: {
+    color: C.gold,
+    fontSize: 16,
+    marginHorizontal: 12,
+    opacity: 0.6,
   },
   statusContainer: {
     alignItems: 'center',
-    marginBottom: 40,
-    minHeight: 60,
+    minHeight: 65,
     justifyContent: 'center',
-  },
-  statusText: {
-    fontSize: 18,
-    color: '#FFFFFF',
-    fontWeight: '600',
-    marginTop: 10,
-  },
-  errorText: {
-    fontSize: 14,
-    color: '#FEE2E2',
-    textAlign: 'center',
-  },
-  bufferingContainer: {
-    alignItems: 'center',
-  },
-  playingContainer: {
-    alignItems: 'center',
-  },
-  pulseCircle: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#10B981',
     marginBottom: 8,
   },
+  statusText: {
+    fontSize: 15,
+    color: C.creamSoft,
+    fontWeight: '500',
+    marginTop: 10,
+  },
+  statusTextIdle: {
+    fontSize: 15,
+    color: C.warmGray,
+    fontWeight: '400',
+    fontStyle: 'italic',
+  },
+  errorText: {
+    fontSize: 13,
+    color: C.errorSoft,
+    textAlign: 'center',
+  },
+  liveContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    backgroundColor: 'rgba(218, 165, 32, 0.12)',
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: C.gold,
+    marginRight: 8,
+  },
+  liveText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.gold,
+    letterSpacing: 2,
+  },
+  playSection: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 24,
+    height: 130,
+  },
+  playGlowRing: {
+    position: 'absolute',
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    borderWidth: 2,
+    borderColor: 'rgba(218, 165, 32, 0.2)',
+  },
   playButton: {
-    alignSelf: 'center',
-    marginBottom: 40,
+    shadowColor: C.gold,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 12,
   },
   playButtonGradient: {
     width: 100,
@@ -373,59 +461,48 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    borderWidth: 3,
+    borderColor: 'rgba(255, 248, 231, 0.15)',
   },
   playButtonText: {
-    fontSize: 50,
-    color: '#FFFFFF',
+    fontSize: 38,
+    color: C.bgDark,
+    fontWeight: '900',
+    marginLeft: 4,
   },
   volumeContainer: {
-    marginBottom: 30,
+    marginBottom: 20,
+  },
+  volumeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   volumeLabel: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    marginBottom: 10,
+    fontSize: 14,
+    color: C.creamSoft,
     fontWeight: '600',
-  },
-  volumeControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  volumeIcon: {
-    fontSize: 20,
-    marginHorizontal: 10,
-  },
-  volumeSlider: {
-    flex: 1,
-    height: 40,
   },
   volumeValue: {
     fontSize: 14,
-    color: '#E5E7EB',
-    textAlign: 'center',
-    marginTop: 5,
+    color: C.gold,
+    fontWeight: '600',
   },
-  infoContainer: {
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
-    borderRadius: 10,
-    padding: 15,
+  volumeSlider: {
+    width: '100%',
+    height: 40,
   },
-  infoLabel: {
+  decoRow: {
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  decoText: {
     fontSize: 12,
-    color: '#E5E7EB',
-    marginBottom: 5,
-  },
-  infoValue: {
-    fontSize: 12,
-    color: '#FFFFFF',
-    fontWeight: '500',
+    color: C.warmGrayDark,
+    letterSpacing: 1.5,
+    fontStyle: 'italic',
   },
 });
 
 export default RadioPlayer;
-
